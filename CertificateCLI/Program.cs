@@ -51,7 +51,7 @@ namespace CertificateCLI
         public static int Main(string[] args)
         {
             //args = new string[] { "generate", "-in", "Let's Encrypt", "-sn", "A Server" };
-            args = new string[] { "view", "-f", "CN=Unnamed Issuer", "MIID/AIBAzCCA8IGCSqGSIb3DQEHAaCCA7MEggOvMIIDqzCCA6cGCSqGSIb3DQEHBqCCA5gwggOUAgEAMIIDjQYJKoZIhvcNAQcBMBwGCiqGSIb3DQEMAQYwDgQIb94cfT4YxVkCAggAgIIDYKOeZcT2L1Av3qlq/kDEGyGjY04CE1lrU0uv3RZ34Gg9TLE6J7nvcT25b9uKdE9rmStJPqdr7qUsukRGWMemHKIRnRGmcL3B2QDM0t8brYvSrQwZNDi8wfYj+wIQ01i44BfliIrqUMLD4tU4/eBiPzXy3TboBuc7b/p7fVB6zwLju0YJkOkCJREAh6PAj2xoSP65mM4LU5tyzeCovY3xlri5ogcjWxPfyNpvnncqqlaTlYfKLMjkqDFTaI/sdIvRcghJryhppiKExOmVxOSTCaOwcx4WoAmDmEplz968y/qT8pkymgpcVT+e+xbly9wHRxUnezMN86w/1XIODyON7CtNQejEBVQ0x3I5pPQk9my/mdA5N91lU8ykQ1cLo8O/iQb6MmD4GQJISe/LrmWtglYXfWkh8iwW8YEG3PMnoUPzrx6bEfUWvDHGEJxZEpv0YhPJK4fdVltah0vD9p1uq9MiAcYxjDpk3KOyDYqI8aMe2YBOR90rhzwtxYEDaM1hgju2tT93yW23EhO5VeclvbztRqhlrK3nQ0VKy/B+Gey14dKUdmrqECXx8vUzBUhKj5xG3muk1sIMlxDHrm2O6GMAn6o91e6SOrOTE6UU/ZuQze2EVBTjRci2r7XuVt3dtAv+UmL+zVXgiQ0Zvn8kHnBI6gQQ3DXwze8INvGOEPPNuRT8D7XA6xDpLJMhIFwN7yXntvRC4/gA1NiAlPkNTBmWu5iVXNF2cVzclkEWv2Jr2zrlJXzxiF6D73Qs+Gy8bbVBr0jlc/DPkkVBOzWEaL6bR7K9KB4aTLXRnlpuM457tmDASccIoDuT0F6iWX59t7C1qLQyT04puBGzQ9wMwA0vmuU/vb3urzwlnKNcVWwxWth740FvkwdJDPoLTST0A6jt+i8PSk4QwUddDEb3V03EVdt5eG7bzrbCLQ+mXJZM7sZoQVml8BrDcWIAzSuUCz/bzHB7bqOXNRUrMwXdi7uWDzmyX47M4GgDz1jHaXQYBhr1sfSXDaEYfIwNtPb36bv4UP+O6FzkthDyJpPsOgu1FStVubiFEnDCI0bbK7KzpIvPVD5NIyHn/psT3ZoxJtC4GA5nhUaLqzOGAUZmUs2TNDqkoHHbXZxauOOcv3Q/ra6HjuJYYCTbTD50p9kxlzAxMCEwCQYFKw4DAhoFAAQUMPE/Pmm2s/lTfX8dKFMck8XTA8wECJNTFwglC8YMAgIIAA==" };
+            args = new string[] { "view", "-f", "Let's Encrypt", "base64.txt" };
             //args = new string[] { "generate", "-in", "Let's Encrypt", "-sn", "A Server" };
 
             CertificateEmpire? empire = null;
@@ -144,21 +144,22 @@ namespace CertificateCLI
                 {
                     PrintVersion();
                 }
+                else if (af.HasFlag(ArgFlags.Generate) && af.HasFlag(ArgFlags.IssuerName) && af.HasFlag(ArgFlags.SubjectName))
+                {
+                    Console.WriteLine("certcli: Generating certs with custom params ...");
+                    empire = CertificateAPI.CertGenerator.GenerateEmpire($"CN={args[2]}", $"CN={args[4]}");
+                }
                 else if (af.HasFlag(ArgFlags.Generate))
                 {
                     Console.WriteLine("certcli: Generating certs with default params ...");
                     empire = CertificateAPI.CertGenerator.GenerateEmpire("CN=Unnamed Issuer", "CN=Unnamed MLAPI Development Certificate");
                 }
-                else if (af.HasFlag(ArgFlags.View & ArgFlags.FileInput))
+                else if (af.HasFlag(ArgFlags.View) && af.HasFlag(ArgFlags.FileInput))
                 {
                     // Print base64
-                    CertificateAPI.Pfx.GetPfxBase64(args[3], args[2]);
+                    Console.WriteLine(PfxUtility.GetPfxFromBase64(args[3], $"CN={args[2]}").ToString());
                 }
-                else if (af.HasFlag(ArgFlags.Generate & ArgFlags.IssuerName & ArgFlags.SubjectName))
-                {
-                    Console.WriteLine("certcli: Generating certs with custom params ...");
-                    empire = CertificateAPI.CertGenerator.GenerateEmpire($"CN={args[2]}", $"CN={args[4]}");
-                }
+
                 else if (af.HasFlag(ArgFlags.View))
                 {
                     Console.WriteLine("certcli: use the -f parameter with a file path");
@@ -175,20 +176,29 @@ namespace CertificateCLI
                 return 1;
             }
 
-            if (empire != null)
+            if (empire.HasValue)
             {
-                Console.WriteLine($"{empire.Value.ToString()}");
-
-                using (var f = File.OpenWrite("issuer.cer")) {
+                using (var f = File.OpenWrite("issuer.cer")) 
+                {
+                    Console.WriteLine("Saving issuer certification as: issuer.cer");
                     var buffer = empire.Value.issuerCertificate.GetEncoded();
                     f.Write(buffer, 0, buffer.Length);
                 }
 
                 using (var f = File.OpenWrite("subject.cer"))
                 {
+                    Console.WriteLine("Saving subject certification as: subject.cer");
                     var buffer = empire.Value.subjectCertificate.GetEncoded();
                     f.Write(buffer, 0, buffer.Length);
                 }
+
+                using (var f = File.OpenWrite("base64.txt"))
+                {
+                    Console.WriteLine("Pasting the base64 encoded PFX-container into base64.txt");
+                    var buffer = System.Text.Encoding.ASCII.GetBytes(PfxUtility.ToPfxBase64(empire.Value.issuerCertificate, empire.Value.issuerKeyPair));
+                    f.Write(buffer, 0, buffer.Length);
+                }
+
             }
 
             return 0;

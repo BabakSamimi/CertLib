@@ -16,7 +16,6 @@ using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto.Operators;
 using Org.BouncyCastle.Utilities.Encoders;
-using Org.BouncyCastle.Utilities.IO.Pem;
 
 /*
  * How self-signing works (development purpose):
@@ -69,130 +68,6 @@ namespace CertificateAPI
         }
     }
 
-    public static class Pfx
-    {
-        // Reads in a base64 string and converts it into a PFX file
-        public static void GetPfxBase64(string b64, string alias)
-        {
-            byte[] bytes = Base64.Decode(b64);
-            //Pkcs12Store store = new Pkcs12StoreBuilder().Build();
-
-
-            /*using (MemoryStream memstream = new MemoryStream(bytes))
-            {
-                store.Load(memstream, "".ToCharArray());
-            }*/
-
-            X509Certificate cert = new X509CertificateParser().ReadCertificate(bytes);
-
-            Console.WriteLine(cert.ToString());
-
-        }
-    }
-
-    public struct CertificateEmpire
-    {
-
-        public AsymmetricCipherKeyPair issuerKeyPair;
-        public AsymmetricCipherKeyPair subjectKeyPair;
-
-        public string issuerName;
-        public string subjectName;
-
-        public X509Certificate issuerCertificate;
-        public X509Certificate subjectCertificate;
-
-        public BigInteger IssuerPublicKey
-        {
-            get
-            {
-                PropertyInfo propInfo = issuerKeyPair.Private.GetType().GetProperty("PublicExponent");
-                return (BigInteger)propInfo.GetValue((object)issuerKeyPair.Private);
-            }
-        }
-
-        private BigInteger IssuerPrivateKey
-        {
-            get
-            {
-                PropertyInfo propInfo = issuerKeyPair.Private.GetType().GetProperty("Exponent");
-                return (BigInteger)propInfo.GetValue((object)issuerKeyPair.Private);
-            }
-        }
-
-        public BigInteger SubjectPublicKey
-        {
-            get
-            {
-                PropertyInfo propInfo = subjectKeyPair.Private.GetType().GetProperty("PublicExponent");
-                return (BigInteger)propInfo.GetValue((object)subjectKeyPair.Private);
-            }
-        }
-
-        private BigInteger SubjectPrivateKey
-        {
-            get
-            {
-                PropertyInfo propInfo = subjectKeyPair.Private.GetType().GetProperty("Exponent");
-                return (BigInteger)propInfo.GetValue((object)subjectKeyPair.Private);
-            }
-        }
-
-        // Creates a PFX file in base64 based on the CA cert
-        // NOTE: The password is empty.
-        public string ToPfxBase64()
-        {
-            // https://7thzero.com/blog/bouncy-castle-create-a-basic-certificate
-            // https://stackoverflow.com/questions/44755155/store-pkcs12-container-pfx-with-bouncycastle
-            // https://github.com/bcgit/bc-csharp/blob/master/crypto/test/src/pkcs/examples/PKCS12Example.cs
-            Pkcs12Store store = new Pkcs12StoreBuilder().Build();
-            X509CertificateEntry certEntry = new X509CertificateEntry(issuerCertificate);
-
-            store.SetCertificateEntry(issuerCertificate.IssuerDN.ToString(), certEntry);
-            AsymmetricKeyEntry keyEntry = new AsymmetricKeyEntry(issuerKeyPair.Private);
-            store.SetKeyEntry(issuerCertificate.IssuerDN.ToString() + "_key", keyEntry, new X509CertificateEntry[] { certEntry });
-
-
-            //IDictionary bagAttr = new Hashtable();
-
-            //FileStream file = File.Create("certz.pfx");
-            //store.Save(file, "".ToCharArray(), new SecureRandom());
-
-            byte[] pfx;
-
-            try
-            {
-
-                using (var memStream = new MemoryStream())
-                {
-                    store.Save(memStream, "".ToCharArray(), new SecureRandom());
-                    pfx = memStream.ToArray();
-                }
-            }
-            catch(Exception e)
-            {
-                throw e;
-            }
-
-            var result = Pkcs12Utilities.ConvertToDefiniteLength(pfx);
-
-            return Convert.ToBase64String(result);
-        }
-
-
-        public override string ToString()
-        {
-
-            return $@"{issuerName} public key: {IssuerPublicKey}
-            {issuerName} private key: {IssuerPrivateKey}
-            {subjectName} public key: {SubjectPublicKey}
-            {subjectName} private key: {SubjectPrivateKey}";
-        }
-
-        //public int issuerKeySize;
-        //public int certificateKeySize;
-    }
-
     public static class CertGenerator
     {
         /// <summary>
@@ -206,6 +81,9 @@ namespace CertificateAPI
         {
             try
             {
+
+                // TODO: Make sure strings are valid
+
                 RandomGenerator rng = new RandomGenerator();
 
                 // The limit on these are 30 days because we say so

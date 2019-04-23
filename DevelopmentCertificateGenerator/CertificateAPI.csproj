@@ -35,6 +35,8 @@
   <ItemGroup>
     <Compile Include="DevelopmentGenerator.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="PfxUtility.cs" />
+    <Compile Include="CertificateEmpire.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
