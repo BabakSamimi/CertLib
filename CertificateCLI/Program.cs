@@ -2,6 +2,7 @@
 using System.IO;
 using System.Collections.Generic;
 using CertificateAPI;
+using Org.BouncyCastle.X509;
 
 /*
  * This program is only used to test the CertificateAPI
@@ -50,11 +51,11 @@ namespace CertificateCLI
 
         public static int Main(string[] args)
         {
-            //args = new string[] { "generate", "-in", "Let's Encrypt", "-sn", "A Server" };
-            args = new string[] { "view", "-f", "Let's Encrypt", "base64.txt" };
+            //args = new string[] { "generate", "-in", "NSA Intermediate Cert", "-sn", "FRA Phishing Web server" };
+            args = new string[] { "view", "-sn", "FRA Phishing Web server", "-f", "base64SubjectCert.txt" };
             //args = new string[] { "generate", "-in", "Let's Encrypt", "-sn", "A Server" };
 
-            CertificateEmpire? empire = null;
+            CertificateEmpire empire = null;
 
             if (args.Length == 0)
             {
@@ -102,6 +103,12 @@ namespace CertificateCLI
                             af |= ArgFlags.IssuerName;
                             Console.WriteLine("IssuerName flag OR:ed.");
                         }
+                        else if (af == ArgFlags.View || af == ArgFlags.FileInput)
+                        {
+                            af |= ArgFlags.IssuerName;
+                            Console.WriteLine("IssuerName flag OR:ed.");
+                        }
+
                         break;
 
                     case "-sn":
@@ -111,10 +118,15 @@ namespace CertificateCLI
                             af |= ArgFlags.SubjectName;
                             Console.WriteLine("SubjectName flag OR:ed.");
                         }
+                        else if (af == ArgFlags.View || af == ArgFlags.FileInput)
+                        {
+                            af |= ArgFlags.SubjectName;
+                            Console.WriteLine("SubjectName flag OR:ed.");
+                        }
                         break;
 
                     case "-f":
-                        if (af == ArgFlags.View)
+                        if (af.HasFlag(ArgFlags.View | ArgFlags.IssuerName) || af.HasFlag(ArgFlags.View | ArgFlags.SubjectName))
                         {
                             af |= ArgFlags.FileInput;
                             Console.WriteLine("FileInput flag OR:ed");
@@ -147,26 +159,43 @@ namespace CertificateCLI
                 else if (af.HasFlag(ArgFlags.Generate) && af.HasFlag(ArgFlags.IssuerName) && af.HasFlag(ArgFlags.SubjectName))
                 {
                     Console.WriteLine("certcli: Generating certs with custom params ...");
-                    empire = CertificateAPI.CertGenerator.GenerateEmpire($"CN={args[2]}", $"CN={args[4]}");
+                    empire = CertificateAPI.EmpireBuilder.Build($"CN={args[2]}", $"CN={args[4]}") as CertificateEmpire;
                 }
                 else if (af.HasFlag(ArgFlags.Generate))
                 {
                     Console.WriteLine("certcli: Generating certs with default params ...");
-                    empire = CertificateAPI.CertGenerator.GenerateEmpire("CN=Unnamed Issuer", "CN=Unnamed MLAPI Development Certificate");
+                    empire = CertificateAPI.EmpireBuilder.Build("CN=Unnamed Issuer", "CN=Unnamed MLAPI Development Certificate") as CertificateEmpire;
                 }
-                else if (af.HasFlag(ArgFlags.View) && af.HasFlag(ArgFlags.FileInput))
+                else if (af.HasFlag(ArgFlags.View) && af.HasFlag(ArgFlags.FileInput) && (af.HasFlag(ArgFlags.IssuerName) || af.HasFlag(ArgFlags.SubjectName)))
                 {
                     // Print base64
-                    Console.WriteLine(PfxUtility.GetPfxFromBase64(args[3], $"CN={args[2]}").ToString());
+                    if (af.HasFlag(ArgFlags.IssuerName))
+                        Console.WriteLine(PfxUtility.GetPfxFromBase64(args[4], $"CN={args[2]}").ToString());
+                    else
+                    {
+                        if (File.Exists(args[4]))
+                        {
+                            using (var filestream = File.OpenRead(args[4]))
+                            {
+                                var buffer = new byte[filestream.Length];
+                                filestream.Read(buffer, 0, (int)filestream.Length);
+                                //Console.WriteLine(System.Text.Encoding.ASCII.GetString(buffer));
+                                PrintCertificateFromBase64(buffer);
+                            }
+                        }
+                        else
+                            throw new FileNotFoundException();
+                    }
                 }
 
                 else if (af.HasFlag(ArgFlags.View))
                 {
-                    Console.WriteLine("certcli: use the -f parameter with a file path");
+                    Console.WriteLine("certcli: view usage:\n\t\t-[sn/in]: \"Name of subject\"\n\t\t-f: [file path]");
                 }
                 else
                 {
-
+                    PrintHelp(false);
+                    return 1;
                 }
 
             }
@@ -176,28 +205,37 @@ namespace CertificateCLI
                 return 1;
             }
 
-            if (empire.HasValue)
+            if (empire != null)
             {
                 using (var f = File.OpenWrite("issuer.cer")) 
                 {
                     Console.WriteLine("Saving issuer certification as: issuer.cer");
-                    var buffer = empire.Value.issuerCertificate.GetEncoded();
+                    var buffer = empire.Certs[0].GetEncoded();
                     f.Write(buffer, 0, buffer.Length);
                 }
 
                 using (var f = File.OpenWrite("subject.cer"))
                 {
                     Console.WriteLine("Saving subject certification as: subject.cer");
-                    var buffer = empire.Value.subjectCertificate.GetEncoded();
+                    var buffer =  empire.Certs[1].GetEncoded();
                     f.Write(buffer, 0, buffer.Length);
                 }
 
-                using (var f = File.OpenWrite("base64.txt"))
+                using (var f = File.OpenWrite("base64Pfx.txt"))
                 {
                     Console.WriteLine("Pasting the base64 encoded PFX-container into base64.txt");
-                    var buffer = System.Text.Encoding.ASCII.GetBytes(PfxUtility.ToPfxBase64(empire.Value.issuerCertificate, empire.Value.issuerKeyPair));
+                    var buffer = System.Text.Encoding.ASCII.GetBytes(PfxUtility.ToPfxBase64(empire.Certs[0], empire.KeyPairs[0]));
                     f.Write(buffer, 0, buffer.Length);
                 }
+
+                using (var f = File.OpenWrite("base64SubjectCert.txt"))
+                {
+                    Console.WriteLine("Pasting the base64 encoded subject certificate into base64SubjectCert");
+                    var buffer = System.Text.Encoding.ASCII.GetBytes(Convert.ToBase64String(empire.Certs[1].GetEncoded()));
+                    f.Write(buffer, 0, buffer.Length);
+                }
+
+
 
             }
 
@@ -219,9 +257,11 @@ namespace CertificateCLI
             Console.WriteLine(version);
         }
 
-        public static void PrintPfx(string b64)
+        public static void PrintCertificateFromBase64(byte[] b64)
         {
-
+            // FRom base64 in byte to baes64 string
+            X509Certificate cert = new X509CertificateParser().ReadCertificate(Convert.FromBase64String(System.Text.Encoding.ASCII.GetString(b64)));
+            Console.WriteLine(cert.ToString());
         }
 
     }

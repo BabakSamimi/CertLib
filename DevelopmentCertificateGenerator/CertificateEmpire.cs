@@ -1,29 +1,50 @@
 ﻿using System;
 using System.Reflection;
+using System.Collections;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Math;
 using Org.BouncyCastle.X509;
 
 namespace CertificateAPI
 {
-    public struct CertificateEmpire
+
+    public interface ICertificateEmpire
     {
+        // Map this according to your needs
+        X509Certificate[] Certs { get; set; }
+        AsymmetricCipherKeyPair[] KeyPairs { get; set; }
+        string[] Names { get; set; }
 
-        public AsymmetricCipherKeyPair issuerKeyPair;
-        public AsymmetricCipherKeyPair subjectKeyPair;
+        string ToString();
+    }
 
-        public string issuerName;
-        public string subjectName;
+    public class CertificateEmpire : ICertificateEmpire
+    {
+        public X509Certificate[] Certs { get; set; } // [0] = issuer, [1] = subject
+        public AsymmetricCipherKeyPair[] KeyPairs { get; set; } // [0] = issuer, [1] = subject
+        public string[] Names { get; set; } // [0] = issuer, [1] = subject
 
-        public X509Certificate issuerCertificate;
-        public X509Certificate subjectCertificate;
+        public override string ToString()
+        {
+            return $@"{Names[0]} public key: {IssuerPublicKey}
+            {Names[0]} private key: {IssuerPrivateKey}
+            {Names[1]} public key: {SubjectPublicKey}
+            {Names[1]} private key: {SubjectPrivateKey}";
+        }
+
+        public CertificateEmpire()
+        {
+            Certs = new X509Certificate[2];
+            KeyPairs = new AsymmetricCipherKeyPair[2];
+            Names = new string[2];
+        }
 
         public BigInteger IssuerPublicKey
         {
             get
             {
-                PropertyInfo propInfo = issuerKeyPair.Private.GetType().GetProperty("PublicExponent");
-                return (BigInteger)propInfo.GetValue((object)issuerKeyPair.Private);
+                PropertyInfo propInfo = KeyPairs[0].Private.GetType().GetProperty("PublicExponent");
+                return (BigInteger)propInfo.GetValue((object)KeyPairs[0].Private);
             }
         }
 
@@ -31,8 +52,8 @@ namespace CertificateAPI
         {
             get
             {
-                PropertyInfo propInfo = issuerKeyPair.Private.GetType().GetProperty("Exponent");
-                return (BigInteger)propInfo.GetValue((object)issuerKeyPair.Private);
+                PropertyInfo propInfo = KeyPairs[0].Private.GetType().GetProperty("Exponent");
+                return (BigInteger)propInfo.GetValue((object)KeyPairs[0].Private);
             }
         }
 
@@ -40,8 +61,8 @@ namespace CertificateAPI
         {
             get
             {
-                PropertyInfo propInfo = subjectKeyPair.Private.GetType().GetProperty("PublicExponent");
-                return (BigInteger)propInfo.GetValue((object)subjectKeyPair.Private);
+                PropertyInfo propInfo = KeyPairs[1].Private.GetType().GetProperty("PublicExponent");
+                return (BigInteger)propInfo.GetValue((object)KeyPairs[1].Private);
             }
         }
 
@@ -49,20 +70,38 @@ namespace CertificateAPI
         {
             get
             {
-                PropertyInfo propInfo = subjectKeyPair.Private.GetType().GetProperty("Exponent");
-                return (BigInteger)propInfo.GetValue((object)subjectKeyPair.Private);
+                PropertyInfo propInfo = KeyPairs[1].Private.GetType().GetProperty("Exponent");
+                return (BigInteger)propInfo.GetValue((object)KeyPairs[1].Private);
             }
-        }
-
-        public override string ToString()
-        {
-            return $@"{issuerName} public key: {IssuerPublicKey}
-            {issuerName} private key: {IssuerPrivateKey}
-            {subjectName} public key: {SubjectPublicKey}
-            {subjectName} private key: {SubjectPrivateKey}";
         }
 
         //public int issuerKeySize;
         //public int certificateKeySize;
     }
+
+    public static class EmpireBuilder
+    {
+        public static ICertificateEmpire Build(string issuer = "CN=Unnamed Issuer", string subject = "CN=Unnamed MLAPI Development Certificate" )
+        {
+            ICertificateGenerator cg = new CertGenerator(); // Choose a Certificate Generator that complies with the ICertificateGenerator protocol
+
+            Tuple<X509Certificate, AsymmetricCipherKeyPair> issuerTuple = cg.GenerateIssuerCertificate(issuer);
+            Tuple<X509Certificate, AsymmetricCipherKeyPair> subjectTuple = cg.IssueCertificate(issuerTuple.Item1, issuerTuple.Item2.Private, subject);
+
+            CertificateEmpire empire = new CertificateEmpire();
+
+            empire.Certs[0] = issuerTuple.Item1;
+            empire.Certs[1] = subjectTuple.Item1;
+
+            empire.KeyPairs[0] = issuerTuple.Item2;
+            empire.KeyPairs[1] = subjectTuple.Item2;
+
+            empire.Names[0] = issuer;
+            empire.Names[1] = subject;
+
+            return empire;
+        }
+    }
+
+
 }

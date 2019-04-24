@@ -19,10 +19,10 @@ namespace CertificateAPI
                 alias = $"{alias}_key";
             }
             else
-                throw new ArgumentNullException();
+                throw new ArgumentNullException("Alias parameter was null");
 
             if (b64 == null)
-                throw new ArgumentNullException();
+                throw new ArgumentNullException("b64 parameter was null");
 
             byte[] buffer;
 
